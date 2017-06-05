@@ -1,0 +1,26 @@
+name:               saw-core-easycrypt
+version:            0.1
+license:            BSD3
+license-file:       LICENSE
+author:             Galois, Inc.
+maintainer:         atomb@galois.com
+copyright:          (c) 2017 Galois Inc.
+category:           Formal Methods
+build-type:         Simple
+cabal-version:      >= 1.8
+synopsis:           SAWCore backend for EasyCrypt
+description:
+  A backend for translating terms in the SAWCore intermediate language
+  into the syntax of EasyCrypt.
+
+library
+  build-depends:
+    ansi-wl-pprint,
+    base == 4.*,
+    saw-core
+  hs-source-dirs: src
+  exposed-modules:
+     Data.EasyCrypt.AST
+     Data.EasyCrypt.Pretty
+     Verifier.SAW.Export.EasyCrypt
+  ghc-options: -Wall -Werror
