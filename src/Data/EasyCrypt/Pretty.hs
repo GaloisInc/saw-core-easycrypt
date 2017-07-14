@@ -64,7 +64,7 @@ ppLet pat e e' =
 ppExpr :: Expr -> Doc
 ppExpr e =
   case e of
-    IntLit n -> int n
+    IntLit n -> integer n
     LocalVar x -> ppIdent x
     ModVar x -> ppIdent x
     App f as -> sep (map ppExpr (f : as))
