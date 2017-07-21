@@ -49,8 +49,10 @@ ppBinding q bs e =
       parens (text "fun" <+> bindDocs <+> text "=>" <+> ppExpr e)
         where
           bindDocs = sep (map ppBind bs)
-          ppBind (x, Nothing) = ppIdent x
-          ppBind (x, Just t) = parens (ppIdent x <+> colon <+> ppType t)
+
+ppBind :: Binding -> Doc
+ppBind (x, Nothing) = ppIdent x
+ppBind (x, Just t) = parens (ppIdent x <+> colon <+> ppType t)
 
 ppLet :: LPattern -> Expr -> Expr -> Doc
 ppLet pat e e' =
@@ -76,3 +78,7 @@ ppExpr e =
                 text "else" <+> ppExpr f
     -- Match e cs ty -> undefined
     Project e1 n -> ppExpr e1 <> period <> int n
+
+ppDef :: Def -> Doc
+ppDef (Def nm bs body) =
+  text "op" <+> text nm <+> sep (map ppBind bs) <+> equals <+> ppExpr body

@@ -28,9 +28,10 @@ data TranslationError t
   = NotSupported
   | NotExpr
   | NotType
+  deriving (Show)
 
 newtype ECTrans a = ECTrans {
-      runECTrans :: WriterT [EC.Binding] (Either (TranslationError Term)) a
+      runECTrans :: WriterT [EC.Def] (Either (TranslationError Term)) a
     }
   deriving (Applicative, Functor, Monad)
 
@@ -44,7 +45,7 @@ flatTermFToExpr ::
   ECTrans EC.Expr
 flatTermFToExpr transFn tf =
   case tf of
-    GlobalDef i   -> EC.ModVar <$> pure (show i)
+    GlobalDef i   -> EC.ModVar <$> pure ("<" ++ show i ++ ">")
     UnitValue     -> EC.Tuple <$> pure []
     UnitType      -> notExpr
     PairValue x y -> EC.Tuple <$> traverse transFn [x, y]
@@ -71,7 +72,7 @@ flatTermFToExpr transFn tf =
 
 {-
 flatTermFToType ::
-  (MonadWriter EC.Binding m) =>
+  (MonadWriter EC.Def m) =>
   (t -> m EC.Type) ->
   FlatTermF t ->
   m EC.Tupe
@@ -120,5 +121,7 @@ termFToExpr transFn t =
 translateTerm :: (Termlike t) => t -> ECTrans EC.Expr
 translateTerm t = termFToExpr translateTerm (unwrapTermF t)
 
-translateTermDoc :: Term -> ECTrans Doc
-translateTermDoc t = ppExpr <$> translateTerm t
+translateTermDoc :: Term -> Either (TranslationError Term) Doc
+translateTermDoc t = do
+  (expr, defs) <- runWriterT $ runECTrans $ translateTerm t
+  return $ (vcat (map ppDef defs)) <$$> ppExpr expr
