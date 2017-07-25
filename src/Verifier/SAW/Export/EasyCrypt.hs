@@ -1,7 +1,9 @@
 {-# LANGUAGE
   FlexibleInstances,
   GeneralizedNewtypeDeriving,
-  MultiParamTypeClasses
+  MultiParamTypeClasses,
+  OverloadedStrings,
+  ViewPatterns
 #-}
 
 {- |
@@ -17,10 +19,12 @@ module Verifier.SAW.Export.EasyCrypt where
 
 import Control.Monad.Except
 import Control.Monad.Writer
+import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.EasyCrypt.AST as EC
 import Data.EasyCrypt.Pretty
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 
@@ -30,14 +34,47 @@ data TranslationError t
   | NotType
   deriving (Show)
 
-newtype ECTrans a = ECTrans {
-      runECTrans :: WriterT [EC.Def] (Either (TranslationError Term)) a
-    }
+newtype ECTrans a =
+  ECTrans {
+    runECTrans :: WriterT
+                  [EC.Def]
+                  (Either (TranslationError Term))
+                  a
+  }
   deriving (Applicative, Functor, Monad)
 
 instance MonadError (TranslationError Term) ECTrans where
     throwError e = ECTrans $ lift $ throwError e
     catchError (ECTrans a) h = ECTrans $ catchError a $ runECTrans . h
+
+zipFilter :: [Bool] -> [a] -> [a]
+zipFilter bs = map snd . filter fst . zip bs
+
+globalArgsMap :: Map.Map Ident [Bool]
+globalArgsMap = Map.fromList
+  [ ("Prelude.take", [False, True, False, True])
+  , ("Prelude.drop", [False, False, True, True])
+  ]
+
+translateIdent :: Ident -> EC.Ident
+translateIdent i =
+  case i of
+    "Prelude.False" -> "false"
+    "Prelude.True" -> "true"
+    "Prelude.take" -> "take"
+    "Prelude.drop" -> "drop"
+    _ -> show i
+
+translateApp :: (Termlike t) =>
+                Map.Map Ident [Bool] ->
+                t ->
+                [t] ->
+                ECTrans EC.Expr
+translateApp argsMap (asGlobalDef -> Just i) args =
+  EC.App (EC.ModVar (translateIdent i)) <$> traverse translateTerm args'
+    where
+      args' = (maybe id zipFilter (Map.lookup i argsMap)) args
+translateApp _ _ _ = throwError $ NotSupported
 
 flatTermFToExpr ::
   (t -> ECTrans EC.Expr) ->
@@ -45,7 +82,7 @@ flatTermFToExpr ::
   ECTrans EC.Expr
 flatTermFToExpr transFn tf =
   case tf of
-    GlobalDef i   -> EC.ModVar <$> pure ("<" ++ show i ++ ">")
+    GlobalDef i   -> EC.ModVar <$> pure (translateIdent i)
     UnitValue     -> EC.Tuple <$> pure []
     UnitType      -> notExpr
     PairValue x y -> EC.Tuple <$> traverse transFn [x, y]
@@ -70,56 +107,49 @@ flatTermFToExpr transFn tf =
     notExpr = throwError $ NotExpr
     notSupported = throwError $ NotSupported
 
-{-
 flatTermFToType ::
-  (MonadWriter EC.Def m) =>
-  (t -> m EC.Type) ->
+  (t -> ECTrans EC.Type) ->
   FlatTermF t ->
-  m EC.Tupe
-flatTermFToType transFn tf =
+  ECTrans EC.Type
+flatTermFToType _transFn tf =
+  case tf of
     GlobalDef _   -> notType
     UnitValue     -> notType
     UnitType      -> notSupported
     PairValue _ _ -> notType
-    PairType x y  ->
+    PairType _ _  -> notSupported
     PairLeft _    -> notType
     PairRight _   -> notType
     EmptyValue         -> notType
-    EmptyType          -> pure $ RecordTDoc []
+    EmptyType          -> pure $ EC.TupleTy []
     FieldValue _ _ _   -> notType
-    FieldType f x y    -> ppFieldType <$> pp PrecNone f <*> pp PrecNone x <*> pp PrecNone y
+    FieldType _ _ _    -> notSupported
     RecordSelector _ _ -> notType
-    CtorApp c l      -> TermDoc . ppAppList prec (ppIdent c) <$> traverse transFn l
-    DataTypeApp dt l -> TermDoc . ppAppList prec (ppIdent dt) <$> traverse transFn l
-    Sort s -> pure $ TermDoc $ text (show s)
+    CtorApp _ _      -> notSupported
+    DataTypeApp _ _  -> notSupported
+    Sort _ -> notType
     NatLit _ -> notType
     ArrayValue _ _ -> notType
     FloatLit _  -> notType
     DoubleLit _ -> notType
     StringLit _ -> notType
     ExtCns (EC _ _ _) -> notType
--}
-
-termFToExpr ::
-  (t -> ECTrans EC.Expr) ->
-  TermF t ->
-  ECTrans EC.Expr
-termFToExpr transFn t =
-  case t of
-    FTermF tf -> flatTermFToExpr transFn tf
-    -- TODO: traverse all bindings for saturated binding
-    Lambda _ _ e -> EC.Binding EC.Lambda <$> undefined <*> transFn e
-    Pi _ _ _ -> notSupported
-    -- TODO: traverse all arguments for saturated application
-    App f e -> EC.App <$> transFn f <*> traverse transFn [e]
-    Let _ _ -> notSupported
-    LocalVar i -> EC.LocalVar <$> pure (show i)
-    Constant _ _ _ -> notSupported
   where
+    notType = throwError $ NotType
     notSupported = throwError $ NotSupported
 
 translateTerm :: (Termlike t) => t -> ECTrans EC.Expr
-translateTerm t = termFToExpr translateTerm (unwrapTermF t)
+translateTerm t =
+  case t of
+    (asFTermF -> Just tf)  -> flatTermFToExpr translateTerm tf
+    (asLambda -> Just _) -> EC.Binding EC.Lambda <$> undefined <*> translateTerm e
+      where (_args, e) = asLambdaList t
+    (asApp -> Just _) -> translateApp globalArgsMap f as
+      where (f, as) = asApplyAll t
+    (asLocalVar -> Just i) -> EC.LocalVar <$> pure (show i)
+    _ -> notSupported
+  where
+    notSupported = throwError $ NotSupported
 
 translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
