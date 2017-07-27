@@ -37,8 +37,8 @@ ppType :: Type -> Doc
 ppType t =
   case t of
     TyVar x -> ppIdent x
-    TupleTy tys -> starSepList (map ppType tys)
-    TyConstr _x _tys -> undefined
+    TupleTy tys -> parens (starSepList (map ppType tys))
+    TyConstr x tys -> hsep (ppIdent x : map ppType tys)
     FunTy fty aty -> ppType fty <+> text "->" <+> ppType aty
 
 -- Anonymous bindings.
@@ -76,9 +76,8 @@ ppExpr e =
     If c t f -> text "if" <+> ppExpr c <+>
                 text "then" <+> ppExpr t <+>
                 text "else" <+> ppExpr f
-    -- Match e cs ty -> undefined
     Project e1 n -> ppExpr e1 <> period <> int n
 
 ppDef :: Def -> Doc
 ppDef (Def nm bs body) =
-  text "op" <+> text nm <+> sep (map ppBind bs) <+> equals <+> ppExpr body
+  hsep $ [text "op", text nm] ++ map ppBind bs ++ [equals, ppExpr body]
