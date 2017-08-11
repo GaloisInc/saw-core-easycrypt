@@ -32,6 +32,7 @@ data TranslationError a
   = NotSupported a
   | NotExpr a
   | NotType a
+  | LocalVarOutOfBounds a
   deriving (Show)
 
 newtype ECTrans a =
@@ -55,9 +56,14 @@ showFTermF = show . Unshared . FTermF
 
 globalArgsMap :: Map.Map Ident [Bool]
 globalArgsMap = Map.fromList
-  [ ("Prelude.take", [False, True, False, True])
+  [ ("Prelude.append", [False, False, False, True, True])
+  , ("Prelude.take", [False, True, False, True])
   , ("Prelude.drop", [False, False, True, True])
+  , ("Prelude.Vec", [False, True])
   ]
+
+filterArgs :: Ident -> [a] -> [a]
+filterArgs i = maybe id zipFilter (Map.lookup i globalArgsMap)
 
 translateIdent :: Ident -> EC.Ident
 translateIdent i =
@@ -65,8 +71,13 @@ translateIdent i =
     "Prelude.Bool" -> "bool"
     "Prelude.False" -> "false"
     "Prelude.True" -> "true"
+    "Prelude.Nat" -> "int"
+    "Prelude.Vec" -> "list"
+    "Prelude.append" -> "(++)"
     "Prelude.take" -> "take"
     "Prelude.drop" -> "drop"
+    "Prelude.zip" -> "zip"
+    "Prelude.zipWith" -> "zipWith"
     _ -> show i
 
 flatTermFToExpr ::
@@ -107,7 +118,7 @@ flatTermFToType ::
   ECTrans EC.Type
 flatTermFToType transFn tf =
   case tf of
-    GlobalDef _   -> notSupported
+    GlobalDef i   -> EC.TyConstr <$> pure (translateIdent i) <*> pure []
     UnitValue     -> notType
     UnitType      -> EC.TyConstr <$> pure "unit" <*> pure []
     PairValue _ _ -> notType
@@ -119,9 +130,10 @@ flatTermFToType transFn tf =
     FieldValue _ _ _   -> notType
     FieldType _ _ _    -> notSupported
     RecordSelector _ _ -> notType
-    CtorApp _ _      -> notSupported
+    CtorApp _ _      -> notType
     DataTypeApp i args ->
-      EC.TyConstr <$> pure (translateIdent i) <*> traverse transFn args
+      EC.TyConstr <$> pure (translateIdent i) <*> traverse transFn args'
+        where args' = filterArgs i args
     Sort _ -> notType
     NatLit _ -> notType
     ArrayValue _ _ -> notType
@@ -154,19 +166,21 @@ translateTerm env t =
         where
           (args, e) = asLambdaList t
           argNames = map fst args
-    (asApp -> Just _) ->
-      EC.App <$> translateTerm env f <*> traverse (translateTerm env) args
-        where
-          -- TODO: identify function being applied when possible
-          -- args' = (maybe id zipFilter (Map.lookup i argsMap)) args
-          (f, args) = asApplyAll t
+    (asApp -> Just _) -> do
+      let (f, args) = asApplyAll t
+          args' = case f of
+                    (asGlobalDef -> Just i) -> filterArgs i args
+                    _ -> args
+      EC.App <$> translateTerm env f
+             <*> traverse (translateTerm env) args'
     (asLocalVar -> Just n)
       | n < length env -> EC.LocalVar <$> pure (env !! n)
-      | otherwise -> EC.LocalVar <$> pure "<out of bounds>"
+      | otherwise -> throwError $ LocalVarOutOfBounds (showTermlike t)
     (unwrapTermF -> Constant n body _) -> do
       b <- translateTerm env body
-      -- TODO: identify arguments and pull them into the Def
-      tell [EC.Def n [] b]
+      case b of
+        EC.Binding EC.Lambda args b' -> tell [EC.Def n args b']
+        _ -> tell [EC.Def n [] b]
       EC.ModVar <$> pure n
     _ -> notSupported
   where

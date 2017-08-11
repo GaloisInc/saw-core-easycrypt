@@ -38,7 +38,7 @@ ppType t =
   case t of
     TyVar x -> ppIdent x
     TupleTy tys -> parens (starSepList (map ppType tys))
-    TyConstr x tys -> hsep (ppIdent x : map ppType tys)
+    TyConstr x tys -> hsep (map ppType tys ++ [ppIdent x])
     FunTy fty aty -> ppType fty <+> text "->" <+> ppType aty
 
 -- Anonymous bindings.
