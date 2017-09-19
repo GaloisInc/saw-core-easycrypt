@@ -26,7 +26,7 @@ import Data.EasyCrypt.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
+import Verifier.SAW.Term.Pretty (showTerm)
 
 data TranslationError a
   = NotSupported a
@@ -153,7 +153,7 @@ translateType t =
       EC.FunTy <$> translateType ty <*> translateType body
     _ -> notSupported
   where
-    notSupported = throwError $ NotSupported (showTermlike t)
+    notSupported = throwError $ NotSupported (showTerm t)
 
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
 translateTerm env t =
@@ -175,7 +175,7 @@ translateTerm env t =
              <*> traverse (translateTerm env) args'
     (asLocalVar -> Just n)
       | n < length env -> EC.LocalVar <$> pure (env !! n)
-      | otherwise -> throwError $ LocalVarOutOfBounds (showTermlike t)
+      | otherwise -> throwError $ LocalVarOutOfBounds (showTerm t)
     (unwrapTermF -> Constant n body _) -> do
       b <- translateTerm env body
       case b of
@@ -184,7 +184,7 @@ translateTerm env t =
       EC.ModVar <$> pure n
     _ -> notSupported
   where
-    notSupported = throwError $ NotSupported (showTermlike t)
+    notSupported = throwError $ NotSupported (showTerm t)
 
 translateTermDoc :: Term -> Either (TranslationError String) Doc
 translateTermDoc t = do
