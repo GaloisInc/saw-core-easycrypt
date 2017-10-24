@@ -26,7 +26,6 @@ import Data.EasyCrypt.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty (showTerm)
 
 data TranslationError a
   = NotSupported a
@@ -39,12 +38,12 @@ newtype ECTrans a =
   ECTrans {
     runECTrans :: WriterT
                   [EC.Def]
-                  (Either (TranslationError String))
+                  (Either (TranslationError Term))
                   a
   }
   deriving (Applicative, Functor, Monad, MonadWriter [EC.Def])
 
-instance MonadError (TranslationError String) ECTrans where
+instance MonadError (TranslationError Term) ECTrans where
     throwError e = ECTrans $ lift $ throwError e
     catchError (ECTrans a) h = ECTrans $ catchError a $ runECTrans . h
 
@@ -109,8 +108,8 @@ flatTermFToExpr transFn tf =
     StringLit _ -> notSupported
     ExtCns (EC _ _ _) -> notSupported
   where
-    notExpr = throwError $ NotExpr (showFTermF tf)
-    notSupported = throwError $ NotSupported (showFTermF tf)
+    notExpr = throwError $ NotExpr $ Unshared $ FTermF tf
+    notSupported = throwError $ NotSupported $ Unshared $ FTermF tf
 
 flatTermFToType ::
   (Term -> ECTrans EC.Type) ->
@@ -142,8 +141,8 @@ flatTermFToType transFn tf =
     StringLit _ -> notType
     ExtCns (EC _ _ _) -> notType
   where
-    notType = throwError $ NotType (showFTermF tf)
-    notSupported = throwError $ NotSupported (showFTermF tf)
+    notType = throwError $ NotType $ Unshared $ FTermF tf
+    notSupported = throwError $ NotSupported $ Unshared $ FTermF tf
 
 translateType :: Term -> ECTrans EC.Type
 translateType t =
@@ -153,7 +152,7 @@ translateType t =
       EC.FunTy <$> translateType ty <*> translateType body
     _ -> notSupported
   where
-    notSupported = throwError $ NotSupported (showTerm t)
+    notSupported = throwError $ NotSupported t
 
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
 translateTerm env t =
@@ -175,7 +174,7 @@ translateTerm env t =
              <*> traverse (translateTerm env) args'
     (asLocalVar -> Just n)
       | n < length env -> EC.LocalVar <$> pure (env !! n)
-      | otherwise -> throwError $ LocalVarOutOfBounds (showTerm t)
+      | otherwise -> throwError $ LocalVarOutOfBounds t
     (unwrapTermF -> Constant n body _) -> do
       b <- translateTerm env body
       case b of
@@ -184,9 +183,9 @@ translateTerm env t =
       EC.ModVar <$> pure n
     _ -> notSupported
   where
-    notSupported = throwError $ NotSupported (showTerm t)
+    notSupported = throwError $ NotSupported t
 
-translateTermDoc :: Term -> Either (TranslationError String) Doc
+translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
   (expr, defs) <- runWriterT $ runECTrans $ translateTerm [] t
   return $ (vcat (map ppDef defs)) <$$> ppExpr expr
