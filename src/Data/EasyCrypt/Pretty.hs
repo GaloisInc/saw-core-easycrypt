@@ -77,7 +77,11 @@ ppExpr e =
                 text "then" <+> ppExpr t <+>
                 text "else" <+> ppExpr f
     Project e1 n -> ppExpr e1 <> period <> int n
+    Record fields -> encloseSep (text "{|") (text "|}") (text ";") (map ppRecordField fields)
 
 ppDef :: Def -> Doc
 ppDef (Def nm bs body) =
   hsep $ [text "op", text nm] ++ map ppBind bs ++ [equals, ppExpr body]
+
+ppRecordField :: RecordField -> Doc
+ppRecordField (RecordField name value) = ppIdent name <> text "=" <> ppExpr value

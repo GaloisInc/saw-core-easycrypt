@@ -43,6 +43,10 @@ data Expr
   | If Expr Expr Expr
   -- | Match Expr [Expr] Type
   | Project Expr Int
+  | Record [RecordField]
+  deriving (Show)
+
+data RecordField = RecordField Ident Expr
   deriving (Show)
 
 data Def
