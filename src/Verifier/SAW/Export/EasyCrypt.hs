@@ -32,6 +32,7 @@ data TranslationError a
   | NotExpr a
   | NotType a
   | LocalVarOutOfBounds a
+  | BadTerm a
   deriving (Show)
 
 newtype ECTrans a =
