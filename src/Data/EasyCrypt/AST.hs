@@ -22,6 +22,7 @@ data Type
   | TupleTy [Type]
   | TyConstr Ident [Type]
   | FunTy Type Type
+  | TyApp Ident [Type]
   deriving (Show)
 
 type Binding = (Ident, Maybe Type)
