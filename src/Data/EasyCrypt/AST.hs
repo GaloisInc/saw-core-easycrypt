@@ -50,6 +50,8 @@ data Expr
 data RecordField = RecordField Ident Expr
   deriving (Show)
 
-data Def
-  = Def Ident [Binding] Expr
+data Decl
+  = OpDecl Ident [Binding] Expr
+  | TypeDecl Ident [Ident] Type -- for now we exclude abstract types
+                                -- and subtyping constraints
   deriving (Show)

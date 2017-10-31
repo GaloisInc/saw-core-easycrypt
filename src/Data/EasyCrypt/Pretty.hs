@@ -80,9 +80,15 @@ ppExpr e =
     Record fields -> encloseSep (text "{|") (text "|}") (text ";") (map ppRecordField fields)
     RecordProject record field -> ppExpr record <> text ".`" <> text field
 
-ppDef :: Def -> Doc
-ppDef (Def nm bs body) =
-  hsep $ [text "op", text nm] ++ map ppBind bs ++ [equals, ppExpr body]
+ppDecl :: Decl -> Doc
+ppDecl decl = case decl of
+  OpDecl nm bs body -> hsep $ [text "op", text nm] ++ map ppBind bs ++ [equals, ppExpr body]
+  TypeDecl nm params body -> hsep [text "type"
+                                  ,parens (commaSepList (map ppIdent params))
+                                  ,text nm
+                                  ,equals
+                                  ,ppType body
+                                  ]
 
 ppRecordField :: RecordField -> Doc
 ppRecordField (RecordField name value) = ppIdent name <> text "=" <> ppExpr value
