@@ -91,26 +91,40 @@ flatTermFToExpr transFn tf =
     UnitType      -> notExpr
     PairValue x y -> EC.Tuple <$> traverse transFn [x, y]
     PairType _ _  -> notExpr
-    PairLeft t    -> EC.Project <$> transFn t <*> pure 1
-    PairRight t   -> EC.Project <$> transFn t <*> pure 2
-    EmptyValue         -> notSupported
-    EmptyType          -> notExpr
-    FieldValue _ _ _   -> notSupported
+    PairLeft t    -> EC.TupleProject <$> transFn t <*> pure 1
+    PairRight t   -> EC.TupleProject <$> transFn t <*> pure 2
+    EmptyValue    -> pure $ EC.Record []
+    EmptyType     -> notExpr
+    FieldValue fname fvalue rest -> do fname' <- asString fname
+                                       fvalue' <- transFn fvalue
+                                       recr <- transFn rest
+                                       case mergeRecordFields (EC.Record [EC.RecordField fname' fvalue']) recr of
+                                         Just record -> return record
+                                         Nothing     -> badTerm
     FieldType _ _ _    -> notExpr
-    RecordSelector _ _ -> notSupported
+    RecordSelector record field -> do field' <- asString field
+                                      (flip EC.RecordProject field') <$> transFn record
     CtorApp i []       -> EC.ModVar <$> pure (translateIdent i)
-    CtorApp _ _        -> notSupported
+    CtorApp ctorName args -> EC.App <$> flatTermFToExpr transFn (CtorApp ctorName [])
+                                    <*> mapM transFn args
     DataTypeApp _ _ -> notExpr
     Sort _ -> notExpr
     NatLit i -> EC.IntLit <$> pure i
     ArrayValue _ _ -> notSupported
-    FloatLit _  -> notSupported
-    DoubleLit _ -> notSupported
-    StringLit _ -> notSupported
+    FloatLit _     -> notSupported
+    DoubleLit _    -> notSupported
+    StringLit _    -> notSupported
     ExtCns (EC _ _ _) -> notSupported
   where
-    notExpr = throwError $ NotExpr $ Unshared $ FTermF tf
-    notSupported = throwError $ NotSupported $ Unshared $ FTermF tf
+    notExpr = throwError $ NotExpr errorTerm
+    notSupported = throwError $ NotSupported errorTerm
+    badTerm = throwError $ BadTerm errorTerm
+    errorTerm = Unshared $ FTermF tf
+    asString (asFTermF -> Just (StringLit s)) = pure s
+    asString _ = badTerm
+    mergeRecordFields :: EC.Expr -> EC.Expr -> Maybe EC.Expr
+    mergeRecordFields (EC.Record fs1) (EC.Record fs2) = Just $ EC.Record $ fs1 ++ fs2
+    mergeRecordFields _ _ = Nothing
 
 flatTermFToType ::
   (Term -> ECTrans EC.Type) ->
@@ -128,7 +142,14 @@ flatTermFToType transFn tf =
     EmptyValue         -> notType
     EmptyType          -> pure $ EC.TupleTy []
     FieldValue _ _ _   -> notType
-    FieldType _ _ _    -> notSupported
+    -- record types in EasyCrypt can only be used as named types, so
+    -- we need to construct and declare the corresponding record type
+    -- first
+    FieldType fname ftype rest -> do _fname' <- asString fname
+                                     _ftype' <- transFn ftype
+                                     _rtype <- transFn rest
+                                     -- TODO: finish
+                                     notSupported
     RecordSelector _ _ -> notType
     CtorApp _ _      -> notType
     DataTypeApp i args ->
@@ -142,9 +163,13 @@ flatTermFToType transFn tf =
     StringLit _ -> notType
     ExtCns (EC _ _ _) -> notType
   where
-    notType = throwError $ NotType $ Unshared $ FTermF tf
-    notSupported = throwError $ NotSupported $ Unshared $ FTermF tf
-
+    notType = throwError $ NotType errorTerm
+    notSupported = throwError $ NotSupported errorTerm
+    badTerm = throwError $ BadTerm errorTerm
+    errorTerm = Unshared $ FTermF tf    
+    asString (asFTermF -> Just (StringLit s)) = pure s
+    asString _ = badTerm
+    
 translateType :: Term -> ECTrans EC.Type
 translateType t =
   case t of

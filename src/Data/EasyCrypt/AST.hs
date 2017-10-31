@@ -42,8 +42,9 @@ data Expr
   | Tuple [Expr]
   | If Expr Expr Expr
   -- | Match Expr [Expr] Type
-  | Project Expr Int
+  | TupleProject Expr Int
   | Record [RecordField]
+  | RecordProject Expr Ident
   deriving (Show)
 
 data RecordField = RecordField Ident Expr

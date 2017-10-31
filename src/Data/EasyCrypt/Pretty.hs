@@ -76,8 +76,9 @@ ppExpr e =
     If c t f -> text "if" <+> ppExpr c <+>
                 text "then" <+> ppExpr t <+>
                 text "else" <+> ppExpr f
-    Project e1 n -> ppExpr e1 <> period <> int n
+    TupleProject e1 n -> ppExpr e1 <> period <> int n
     Record fields -> encloseSep (text "{|") (text "|}") (text ";") (map ppRecordField fields)
+    RecordProject record field -> ppExpr record <> text ".`" <> text field
 
 ppDef :: Def -> Doc
 ppDef (Def nm bs body) =
