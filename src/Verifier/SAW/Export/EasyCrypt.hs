@@ -27,6 +27,8 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 
+import Debug.Trace
+
 data TranslationError a
   = NotSupported a
   | NotExpr a
@@ -38,11 +40,11 @@ data TranslationError a
 newtype ECTrans a =
   ECTrans {
     runECTrans :: WriterT
-                  [EC.Def]
+                  [EC.Decl]
                   (Either (TranslationError Term))
                   a
   }
-  deriving (Applicative, Functor, Monad, MonadWriter [EC.Def])
+  deriving (Applicative, Functor, Monad, MonadWriter [EC.Decl])
 
 instance MonadError (TranslationError Term) ECTrans where
     throwError e = ECTrans $ lift $ throwError e
@@ -145,11 +147,10 @@ flatTermFToType transFn tf =
     -- record types in EasyCrypt can only be used as named types, so
     -- we need to construct and declare the corresponding record type
     -- first
-    FieldType fname ftype rest -> do _fname' <- asString fname
-                                     _ftype' <- transFn ftype
-                                     _rtype <- transFn rest
-                                     -- TODO: finish
-                                     notSupported
+    FieldType _fname _ftype _rest -> trace "FieldType" notSupported
+      -- do _fname' <- asString fname
+      --    _ftype' <- transFn ftype
+      --    _rtype <- transFn rest
     RecordSelector _ _ -> notType
     CtorApp _ _      -> notType
     DataTypeApp i args ->
@@ -165,18 +166,25 @@ flatTermFToType transFn tf =
   where
     notType = throwError $ NotType errorTerm
     notSupported = throwError $ NotSupported errorTerm
-    badTerm = throwError $ BadTerm errorTerm
+    -- badTerm = throwError $ BadTerm errorTerm
     errorTerm = Unshared $ FTermF tf    
-    asString (asFTermF -> Just (StringLit s)) = pure s
-    asString _ = badTerm
+    -- asString (asFTermF -> Just (StringLit s)) = pure s
+    -- asString _ = badTerm
     
-translateType :: Term -> ECTrans EC.Type
-translateType t =
+translateType :: [String] -> Term -> ECTrans EC.Type
+translateType env t =
   case t of
-    (asFTermF -> Just tf) -> flatTermFToType translateType tf
+    (asFTermF -> Just tf) -> flatTermFToType (translateType env) tf
     (asPi -> Just (_, ty, body)) ->
-      EC.FunTy <$> translateType ty <*> translateType body
-    _ -> notSupported
+      EC.FunTy <$> translateType env ty <*> translateType env body
+    (asApp -> Just _tf) -> do
+      let (_f, _args) = asApplyAll t
+      notSupported
+      -- (tyn, args') <- case f of
+      --                  (asGlobalDef -> Just i) -> (i, filterArgs i args)
+      --                  _ -> notSupported
+      -- EC.TyApp <$> tyn <*> traverse (translateTerm env) args'
+    _ -> trace "translateType fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
 
@@ -185,7 +193,7 @@ translateTerm env t =
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (translateTerm env) tf
     (asLambda -> Just _) -> do
-      tys <- mapM (translateType . snd) args
+      tys <- mapM (translateType env . snd) args
       EC.Binding EC.Lambda <$> pure (zip argNames (map Just tys))
                            <*> translateTerm (argNames ++ env) e
         where
@@ -204,14 +212,14 @@ translateTerm env t =
     (unwrapTermF -> Constant n body _) -> do
       b <- translateTerm env body
       case b of
-        EC.Binding EC.Lambda args b' -> tell [EC.Def n args b']
-        _ -> tell [EC.Def n [] b]
+        EC.Binding EC.Lambda args b' -> tell [EC.OpDecl n args b']
+        _ -> tell [EC.OpDecl n [] b]
       EC.ModVar <$> pure n
-    _ -> notSupported
+    _ -> trace "translateTerm fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
 
 translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
-  (expr, defs) <- runWriterT $ runECTrans $ translateTerm [] t
-  return $ (vcat (map ppDef defs)) <$$> ppExpr expr
+  (expr, decls) <- runWriterT $ runECTrans $ translateTerm [] t
+  return $ (vcat (map ppDecl decls)) <$$> ppExpr expr
