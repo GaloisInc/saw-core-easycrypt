@@ -177,16 +177,25 @@ translateType env t =
     (asFTermF -> Just tf) -> flatTermFToType (translateType env) tf
     (asPi -> Just (_, ty, body)) ->
       EC.FunTy <$> translateType env ty <*> translateType env body
-    (asApp -> Just _tf) -> do
-      let (_f, _args) = asApplyAll t
-      notSupported
-      -- (tyn, args') <- case f of
-      --                  (asGlobalDef -> Just i) -> (i, filterArgs i args)
-      --                  _ -> notSupported
-      -- EC.TyApp <$> tyn <*> traverse (translateTerm env) args'
+    (asCryptolVector -> Just tf) -> mkECListType <$> translateType env tf
+    (asApp -> Just _) -> do
+       let (f, args) = asApplyAll t
+       trace ("asApp matched on " ++ show f ++ " " ++ show args) notSupported
     _ -> trace "translateType fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
+    mkECListType typ = EC.TyApp "list" [typ]
+
+asCryptolVector :: Monad f => Recognizer f Term Term
+asCryptolVector t = do (f, args) <- asApplyAllRecognizer t
+                       fid <- asGlobalDef f
+                       case (fid, args) of
+                         ("Cryptol.seq", [_, x]) -> snd <$> asVectorType x
+                         _ -> fail "not Cryptol vector"
+                            
+asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
+asApplyAllRecognizer t = do (_f, _args) <- asApp t
+                            return $ trace "apply all recognizer success" $ asApplyAll t
 
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
 translateTerm env t =
