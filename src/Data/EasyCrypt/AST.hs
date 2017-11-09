@@ -20,7 +20,6 @@ data Quantifier
 data Type
   = TyVar Ident
   | TupleTy [Type]
-  | TyConstr Ident [Type]
   | FunTy Type Type
   | TyApp Ident [Type]
   deriving (Show)

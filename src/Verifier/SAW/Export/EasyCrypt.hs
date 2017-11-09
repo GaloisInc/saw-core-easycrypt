@@ -134,9 +134,9 @@ flatTermFToType ::
   ECTrans EC.Type
 flatTermFToType transFn tf =
   case tf of
-    GlobalDef i   -> EC.TyConstr <$> pure (translateIdent i) <*> pure []
+    GlobalDef i   -> EC.TyApp <$> pure (translateIdent i) <*> pure []
     UnitValue     -> notType
-    UnitType      -> EC.TyConstr <$> pure "unit" <*> pure []
+    UnitType      -> EC.TyApp <$> pure "unit" <*> pure []
     PairValue _ _ -> notType
     PairType x y  -> EC.TupleTy <$> traverse transFn [x, y]
     PairLeft _    -> notType
@@ -154,7 +154,7 @@ flatTermFToType transFn tf =
     RecordSelector _ _ -> notType
     CtorApp _ _      -> notType
     DataTypeApp i args ->
-      EC.TyConstr <$> pure (translateIdent i) <*> traverse transFn args'
+      EC.TyApp <$> pure (translateIdent i) <*> traverse transFn args'
         where args' = filterArgs i args
     Sort _ -> notType
     NatLit _ -> notType

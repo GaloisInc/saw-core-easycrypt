@@ -38,8 +38,8 @@ ppType t =
   case t of
     TyVar x -> ppIdent x
     TupleTy tys -> parens (starSepList (map ppType tys))
-    TyConstr x tys -> hsep (map ppType tys ++ [ppIdent x])
     FunTy fty aty -> ppType fty <+> text "->" <+> ppType aty
+    TyApp tyCtorName [tyArg] -> ppType tyArg <+> text tyCtorName
     TyApp tyCtorName tyArgs -> parens (commaSepList $ map ppType tyArgs)
                                <+> text tyCtorName
 
