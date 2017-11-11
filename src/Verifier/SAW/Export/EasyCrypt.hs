@@ -145,7 +145,7 @@ flatTermFToType ::
   (Term -> ECTrans EC.Type) ->
   FlatTermF Term ->
   ECTrans EC.Type
-flatTermFToType transFn tf =
+flatTermFToType transFn tf = trace ("flatTermFToType: " ++ show tf) $
   case tf of
     GlobalDef i   -> EC.TyApp <$> pure (translateIdent i) <*> pure []
     UnitValue     -> notType
