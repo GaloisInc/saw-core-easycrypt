@@ -220,13 +220,22 @@ translateTerm env t = trace ("translateTerm: " ++ show t) $
         where
           (args, e) = asLambdaList t
           argNames = map fst args
-    (asApp -> Just _) -> do
+    (asApp -> Just _) ->
       let (f, args) = asApplyAll t
-          args' = case f of
-                    (asGlobalDef -> Just i) -> filterArgs i args
-                    _ -> args
-      EC.App <$> translateTerm env f
-             <*> traverse (translateTerm env) args'
+      in case f of
+           (asGlobalDef -> Just i) ->
+             case i of
+                "Cryptol.unsafeCoerce" ->
+                -- assuming unsafeCoerce is safe in SAW-Core generated
+                -- by the Cryptol compiler, so we just strip it
+                -- away. For now throwing away the time, but we'll see
+                -- if we need to resulting type (second parameter) in
+                -- practice.
+                  translateTerm env (last args)
+                _ -> EC.App <$> translateTerm env f
+                          <*> traverse (translateTerm env) (filterArgs i args)
+           _ -> EC.App <$> translateTerm env f
+                       <*> traverse (translateTerm env) args
     (asLocalVar -> Just n)
       | n < length env -> EC.LocalVar <$> pure (env !! n)
       | otherwise -> throwError $ LocalVarOutOfBounds t
