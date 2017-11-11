@@ -185,33 +185,32 @@ flatTermFToType transFn tf =
     -- asString _ = badTerm
     
 translateType :: [String] -> Term -> ECTrans EC.Type
-translateType env t =
+translateType env t = trace ("translateType: " ++ show t) $
   case t of
     (asFTermF -> Just tf) -> flatTermFToType (translateType env) tf
     (asPi -> Just (_, ty, body)) ->
       EC.FunTy <$> translateType env ty <*> translateType env body
-    (asCryptolVector -> Just tf) -> mkECListType <$> translateType env tf
-    (asApp -> Just _) -> do
-       let (f, args) = asApplyAll t
-       trace ("asApp matched on " ++ show f ++ " " ++ show args) notSupported
+    (asSeq -> Just tf) -> mkECListType <$> translateType env tf
+    -- (asVectorType -> Just (_, tf)) -> mkECListType <$> translateType env tf
     _ -> trace "translateType fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
     mkECListType typ = EC.TyApp "list" [typ]
 
-asCryptolVector :: Monad f => Recognizer f Term Term
-asCryptolVector t = do (f, args) <- asApplyAllRecognizer t
-                       fid <- asGlobalDef f
-                       case (fid, args) of
-                         ("Cryptol.seq", [_, x]) -> snd <$> asVectorType x
-                         _ -> fail "not Cryptol vector"
+-- | Recognizes an $App (App "Cryptol.seq" _) x$ and returns $x$.
+asSeq :: Monad f => Recognizer f Term Term
+asSeq t = do (f, args) <- asApplyAllRecognizer t
+             fid <- asGlobalDef f
+             case (fid, args) of
+               ("Cryptol.seq", [_, x]) -> return x
+               _ -> fail "not a seq"
                             
 asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
-asApplyAllRecognizer t = do (_f, _args) <- asApp t
-                            return $ trace "apply all recognizer success" $ asApplyAll t
+asApplyAllRecognizer t = do _ <- asApp t
+                            return $ asApplyAll t
 
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
-translateTerm env t =
+translateTerm env t = trace ("translateTerm: " ++ show t) $
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (translateTerm env) tf
     (asLambda -> Just _) -> do
