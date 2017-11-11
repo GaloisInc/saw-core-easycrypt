@@ -62,6 +62,13 @@ globalArgsMap = Map.fromList
   , ("Prelude.take", [False, True, False, True])
   , ("Prelude.drop", [False, False, True, True])
   , ("Prelude.Vec", [False, True])
+  , ("Prelude.uncurry", [False, False, False, True])
+  , ("Prelude.map", [False, False, True, False, True])
+  , ("Prelude.bvXor", [False, True, True])
+  -- Assuming only finite Cryptol sequences
+  , ("Cryptol.ecCat", [False, False, False, True, True])
+  , ("Cryptol.seqZip", [False, False, False, False, True, True])
+  , ("Cryptol.seqMap", [False, False, False, True, True])
   ]
 
 filterArgs :: Ident -> [a] -> [a]
@@ -76,17 +83,23 @@ translateIdent i =
     "Prelude.Nat" -> "int"
     "Prelude.Vec" -> "list"
     "Prelude.append" -> "(++)"
+    "Cryptol.ecCat" -> "(++)"
     "Prelude.take" -> "take"
     "Prelude.drop" -> "drop"
     "Prelude.zip" -> "zip"
+    "Cryptol.seqZip" -> "zip"
     "Prelude.zipWith" -> "zipWith"
+    "Prelude.uncurry" -> "sawcoreUncurry"
+    "Prelude.map" -> "map"
+    "Cryptol.seqMap" -> "map"
+    "Prelude.bvXor" -> "sawcoreBVXor"
     _ -> show i
 
 flatTermFToExpr ::
   (Term -> ECTrans EC.Expr) ->
   FlatTermF Term ->
   ECTrans EC.Expr
-flatTermFToExpr transFn tf =
+flatTermFToExpr transFn tf = trace ("flatTermFToExpr: " ++ show tf) $
   case tf of
     GlobalDef i   -> EC.ModVar <$> pure (translateIdent i)
     UnitValue     -> EC.Tuple <$> pure [] -- TODO: hack
