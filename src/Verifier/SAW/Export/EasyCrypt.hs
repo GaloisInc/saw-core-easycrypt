@@ -228,12 +228,20 @@ translateTerm env t = trace ("translateTerm: " ++ show t) $
                 "Cryptol.unsafeCoerce" ->
                 -- assuming unsafeCoerce is safe in SAW-Core generated
                 -- by the Cryptol compiler, so we just strip it
-                -- away. For now throwing away the time, but we'll see
+                -- away. For now throwing away the type, but we'll see
                 -- if we need to resulting type (second parameter) in
                 -- practice.
                   translateTerm env (last args)
+                "Prelude.fix" -> case args of
+                  [resultType, lambda] ->
+                    case resultType of
+                      (asSeq -> Just (n, _)) -> notSupported
+                        -- EC.App
+                      _ -> notSupported
+                  _ -> badTerm
                 _ -> EC.App <$> translateTerm env f
-                          <*> traverse (translateTerm env) (filterArgs i args)
+                            <*> traverse (translateTerm env) (filterArgs i args)
+                  
            _ -> EC.App <$> translateTerm env f
                        <*> traverse (translateTerm env) args
     (asLocalVar -> Just n)
@@ -248,6 +256,7 @@ translateTerm env t = trace ("translateTerm: " ++ show t) $
     _ -> trace "translateTerm fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
+    badTerm = throwError $ BadTerm t
 
 translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
