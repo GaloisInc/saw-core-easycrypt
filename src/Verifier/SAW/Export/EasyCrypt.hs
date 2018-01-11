@@ -197,12 +197,12 @@ translateType env t = trace ("translateType: " ++ show t) $
     notSupported = throwError $ NotSupported t
     mkECListType typ = EC.TyApp "list" [typ]
 
--- | Recognizes an $App (App "Cryptol.seq" _) x$ and returns $x$.
-asSeq :: Monad f => Recognizer f Term Term
+-- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
+asSeq :: Monad f => Recognizer f Term (Term, Term)
 asSeq t = do (f, args) <- asApplyAllRecognizer t
              fid <- asGlobalDef f
              case (fid, args) of
-               ("Cryptol.seq", [_, x]) -> return x
+               ("Cryptol.seq", [n, x]) -> return (n,x)
                _ -> fail "not a seq"
                             
 asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
