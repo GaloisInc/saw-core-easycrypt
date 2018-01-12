@@ -26,8 +26,9 @@ import Data.EasyCrypt.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-
+import Verifier.SAW.Term.Pretty
 import Debug.Trace
+import qualified Data.Vector as Vector (toList)
 
 data TranslationError a
   = NotSupported a
@@ -35,8 +36,22 @@ data TranslationError a
   | NotType a
   | LocalVarOutOfBounds a
   | BadTerm a
-  deriving (Show)
 
+showError :: (a -> String) -> TranslationError a -> String
+showError printer err = case err of
+  NotSupported a -> "Not supported: " ++ printer a
+  NotExpr a      -> "Expecting an expression term: " ++ printer a
+  NotType a      -> "Expecting a type term: " ++ printer a
+  LocalVarOutOfBounds a -> "Local variable reference is out of bounds: " ++ printer a
+  BadTerm a -> "Malformed term: " ++ printer a
+
+instance {-# OVERLAPPING #-} Show (TranslationError Term) where
+  show = showError showTerm
+
+  
+instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
+  show = showError show 
+  
 newtype ECTrans a =
   ECTrans {
     runECTrans :: WriterT
@@ -65,10 +80,12 @@ globalArgsMap = Map.fromList
   , ("Prelude.uncurry", [False, False, False, True])
   , ("Prelude.map", [False, False, True, False, True])
   , ("Prelude.bvXor", [False, True, True])
+  , ("Prelude.zipWith", [False, False, False, True, True, True, True])
   -- Assuming only finite Cryptol sequences
   , ("Cryptol.ecCat", [False, False, False, True, True])
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
   , ("Cryptol.seqMap", [False, False, False, True, True])
+  , ("Cryptol.ecSplit", [False, True, False, True])
   ]
 
 filterArgs :: Ident -> [a] -> [a]
@@ -93,13 +110,20 @@ translateIdent i =
     "Prelude.map" -> "map"
     "Cryptol.seqMap" -> "map"
     "Prelude.bvXor" -> "sawcoreBVXor"
+    "Cryptol.ecSplit" -> "cryptolECSplit"
     _ -> show i
+
+traceFTermF :: String -> FlatTermF Term -> a -> a
+traceFTermF ctx tf = traceTerm ctx (Unshared $ FTermF tf)
+  
+traceTerm :: String -> Term -> a -> a
+traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 
 flatTermFToExpr ::
   (Term -> ECTrans EC.Expr) ->
   FlatTermF Term ->
   ECTrans EC.Expr
-flatTermFToExpr transFn tf = trace ("flatTermFToExpr: " ++ show tf) $
+flatTermFToExpr transFn tf = traceFTermF "flatTermFToExpr" tf $
   case tf of
     GlobalDef i   -> EC.ModVar <$> pure (translateIdent i)
     UnitValue     -> EC.Tuple <$> pure [] -- TODO: hack
@@ -145,7 +169,7 @@ flatTermFToType ::
   (Term -> ECTrans EC.Type) ->
   FlatTermF Term ->
   ECTrans EC.Type
-flatTermFToType transFn tf = trace ("flatTermFToType: " ++ show tf) $
+flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
   case tf of
     GlobalDef i   -> EC.TyApp <$> pure (translateIdent i) <*> pure []
     UnitValue     -> notType
@@ -185,12 +209,12 @@ flatTermFToType transFn tf = trace ("flatTermFToType: " ++ show tf) $
     -- asString _ = badTerm
     
 translateType :: [String] -> Term -> ECTrans EC.Type
-translateType env t = trace ("translateType: " ++ show t) $
+translateType env t = traceTerm "translateType" t $
   case t of
     (asFTermF -> Just tf) -> flatTermFToType (translateType env) tf
     (asPi -> Just (_, ty, body)) ->
       EC.FunTy <$> translateType env ty <*> translateType env body
-    (asSeq -> Just tf) -> mkECListType <$> translateType env tf
+    (asSeq -> Just (_, tf)) -> mkECListType <$> translateType env tf
     -- (asVectorType -> Just (_, tf)) -> mkECListType <$> translateType env tf
     _ -> trace "translateType fallthrough" notSupported
   where
@@ -210,7 +234,7 @@ asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
-translateTerm env t = trace ("translateTerm: " ++ show t) $
+translateTerm env t = traceTerm "translateTerm" t $
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (translateTerm env) tf
     (asLambda -> Just _) -> do
@@ -232,10 +256,12 @@ translateTerm env t = trace ("translateTerm: " ++ show t) $
                 -- if we need to resulting type (second parameter) in
                 -- practice.
                   translateTerm env (last args)
+                "Prelude.unsafeCoerce" ->
+                  translateTerm env (last args)
                 "Prelude.fix" -> case args of
-                  [resultType, lambda] ->
+                  [resultType, _lambda] ->
                     case resultType of
-                      (asSeq -> Just (n, _)) -> notSupported
+                      (asSeq -> Just (_n, _)) -> notSupported
                         -- EC.App
                       _ -> notSupported
                   _ -> badTerm
