@@ -19,7 +19,8 @@ library
     base == 4.*,
     containers,
     mtl,
-    saw-core
+    saw-core,
+    vector
   hs-source-dirs: src
   exposed-modules:
      Data.EasyCrypt.AST

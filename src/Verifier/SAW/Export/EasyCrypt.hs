@@ -125,7 +125,7 @@ flatTermFToExpr transFn tf = trace ("flatTermFToExpr: " ++ show tf) $
     DataTypeApp _ _ -> notExpr
     Sort _ -> notExpr
     NatLit i -> EC.IntLit <$> pure i
-    ArrayValue _ _ -> notSupported
+    ArrayValue _ vec -> EC.List <$> mapM transFn (Vector.toList vec)
     FloatLit _     -> notSupported
     DoubleLit _    -> notSupported
     StringLit _    -> notSupported

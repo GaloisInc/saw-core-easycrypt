@@ -23,9 +23,10 @@ looseSepList _ [] = empty
 looseSepList _ [d] = d
 looseSepList s (d:l) = d <+> s <+> commaSepList l
 
-commaSepList, starSepList :: [Doc] -> Doc
+commaSepList, starSepList, semiSepList :: [Doc] -> Doc
 commaSepList = tightSepList comma
 starSepList = looseSepList (text "*")
+semiSepList = tightSepList semi
 
 period :: Doc
 period = text "."
@@ -81,6 +82,7 @@ ppExpr e =
     TupleProject e1 n -> ppExpr e1 <> period <> int n
     Record fields -> encloseSep (text "{|") (text "|}") (text ";") (map ppRecordField fields)
     RecordProject record field -> ppExpr record <> text ".`" <> text field
+    List elems -> text "[" <> semiSepList (map ppExpr elems) <> text "]"
 
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of

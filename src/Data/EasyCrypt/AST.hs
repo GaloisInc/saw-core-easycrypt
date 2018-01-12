@@ -45,6 +45,10 @@ data Expr
   | TupleProject Expr Int
   | Record [RecordField]
   | RecordProject Expr Ident
+  | List [Expr] -- ^ List literals, even though the EasyCrypt internal
+                -- AST does not include this constructor because the
+                -- parser desugars list literals into explicit
+                -- applications of cons and empty list constructors
   deriving (Show)
 
 data RecordField = RecordField Ident Expr
