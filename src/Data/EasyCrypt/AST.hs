@@ -18,7 +18,7 @@ data Quantifier
   deriving (Show)
 
 data Type
-  = TyVar Ident
+  = TyVar (Maybe Ident)
   | TupleTy [Type]
   | FunTy Type Type
   | TyApp Ident [Type]

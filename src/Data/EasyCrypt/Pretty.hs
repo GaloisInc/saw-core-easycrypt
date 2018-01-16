@@ -11,6 +11,7 @@ module Data.EasyCrypt.Pretty where
 
 import Text.PrettyPrint.ANSI.Leijen
 import Data.EasyCrypt.AST
+import Data.Maybe (fromMaybe)
 
 -- TODO: import SAWCore pretty-printer?
 tightSepList :: Doc -> [Doc] -> Doc
@@ -37,9 +38,10 @@ ppIdent = text
 ppType :: Type -> Doc
 ppType t =
   case t of
-    TyVar x -> ppIdent x
+    TyVar mx -> ppIdent $ fromMaybe "_" mx
     TupleTy tys -> parens (starSepList (map ppType tys))
     FunTy fty aty -> ppType fty <+> text "->" <+> ppType aty
+    TyApp tyCtorName [] -> text tyCtorName
     TyApp tyCtorName [tyArg] -> ppType tyArg <+> text tyCtorName
     TyApp tyCtorName tyArgs -> parens (commaSepList $ map ppType tyArgs)
                                <+> text tyCtorName

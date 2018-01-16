@@ -111,6 +111,7 @@ translateIdent i =
     "Cryptol.seqMap" -> "map"
     "Prelude.bvXor" -> "sawcoreBVXor"
     "Cryptol.ecSplit" -> "cryptolECSplit"
+    "Cryptol.Num" -> "int"
     _ -> show i
 
 traceFTermF :: String -> FlatTermF Term -> a -> a
@@ -179,7 +180,7 @@ flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
     PairLeft _    -> notType
     PairRight _   -> notType
     EmptyValue         -> notType
-    EmptyType          -> pure $ EC.TupleTy []
+    EmptyType          -> pure $ EC.TyVar Nothing
     FieldValue _ _ _   -> notType
     -- record types in EasyCrypt can only be used as named types, so
     -- we need to construct and declare the corresponding record type
