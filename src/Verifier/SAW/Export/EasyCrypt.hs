@@ -260,9 +260,16 @@ translateTerm env t = traceTerm "translateTerm" t $
                 "Prelude.unsafeCoerce" ->
                   translateTerm env (last args)
                 "Prelude.fix" -> case args of
-                  [resultType, _lambda] ->
+                  [resultType, lambda] ->
                     case resultType of
-                      (asSeq -> Just (_n, _)) -> notSupported
+                      -- TODO: check that 'n' is finite
+                      (asSeq -> Just (n, _)) ->
+                        case lambda of
+                          (asLambda->Just (x, ty, body)) | ty == resultType -> do
+                              len <- translateTerm env n
+                              expr <- translateTerm env body
+                              return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Nothing)] expr, EC.List []]
+                          _ -> badTerm   
                         -- EC.App
                       _ -> notSupported
                   _ -> badTerm
