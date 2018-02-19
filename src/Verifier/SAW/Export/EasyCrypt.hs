@@ -87,6 +87,10 @@ globalArgsMap = Map.fromList
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
   , ("Cryptol.seqMap", [False, False, False, True, True])
   , ("Cryptol.ecSplit", [False, True, False, True])
+  , ("Cryptol.ecXor", [False, True, True, True])
+  , ("Cryptol.PLogicSeq", [False, False, True])
+  , ("Cryptol.PLogicSeqBool", [False])
+  , ("Cryptol.PLogicWord", [False])
   ]
 
 filterArgs :: Ident -> [a] -> [a]
@@ -113,6 +117,10 @@ translateIdent i =
     "Prelude.bvXor" -> "sawcoreBVXor"
     "Cryptol.ecSplit" -> "cryptolECSplit"
     "Cryptol.Num" -> "int"
+    "Cryptol.ecXor" -> "cryptolECXor"
+    "Cryptol.PLogicSeq" -> "cryptolPLogicSeq"
+    "Cryptol.PLogicSeqBool" -> "cryptolPLogicSeq"
+    "Cryptol.PLogicWord" -> "cryptolPLogicWord"
     _ -> show i
 
 traceFTermF :: String -> FlatTermF Term -> a -> a
