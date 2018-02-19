@@ -281,11 +281,11 @@ translateTerm env t = traceTerm "translateTerm" t $
                         case lambda of
                           (asLambda->Just (x, ty, body)) | ty == resultType -> do
                               len <- translateTerm env n
+                              -- let len = EC.App (EC.ModVar "size") [EC.ModVar x]
                               expr <- translateTerm (x:env) body
                               typ <- translateType env ty
                               return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Just typ)] expr, EC.List []]
                           _ -> badTerm   
-                        -- EC.App
                       _ -> notSupported
                   _ -> badTerm
                 _ -> EC.App <$> translateTerm env f
