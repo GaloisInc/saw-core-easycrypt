@@ -74,7 +74,8 @@ ppExpr e =
     IntLit n -> integer n
     LocalVar x -> ppIdent x
     ModVar x -> ppIdent x
-    App f as -> sep (map ppExpr (f : as))
+    App f [] -> ppExpr f
+    App f as -> parens (sep (map ppExpr (f : as)))
     Binding q bs body -> ppBinding q bs body
     Let pat e1 e2 -> ppLet pat e1 e2
     Tuple es -> parens (commaSepList (map ppExpr es))
