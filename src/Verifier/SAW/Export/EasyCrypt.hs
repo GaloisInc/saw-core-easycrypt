@@ -81,7 +81,7 @@ globalArgsMap = Map.fromList
   , ("Prelude.uncurry", [False, False, False, True])
   , ("Prelude.map", [False, False, True, False, True])
   , ("Prelude.bvXor", [False, True, True])
-  , ("Prelude.zipWith", [False, False, False, True, True, True, True])
+  , ("Prelude.zipWith", [False, False, False, True, False, True, True])
   -- Assuming only finite Cryptol sequences
   , ("Cryptol.ecCat", [False, False, False, True, True])
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
