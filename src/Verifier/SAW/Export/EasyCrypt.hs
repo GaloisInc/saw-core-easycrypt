@@ -266,14 +266,12 @@ translateTerm env t = traceTerm "translateTerm" t $
                 "Prelude.unsafeCoerce" ->
                   translateTerm env (last args)
                 "Prelude.fix" -> case args of
-                  [resultType, lambda] -> traceTerm "Prelude.fix: resultType" resultType $ traceTerm "Prelude.fix: lambda" lambda $
+                  [resultType, lambda] -> 
                     case resultType of
                       -- TODO: check that 'n' is finite
                       (asSeq -> Just (n, _)) ->
-                        traceTerm "Prelude.fix: n" n $
                         case lambda of
                           (asLambda->Just (x, ty, body)) | ty == resultType -> do
-                              trace ("Prelude.fix: x: " ++ x) $ traceTerm "Prelude.fix: ty" ty $ traceTerm "Prelude.fix: body" body $ return ()
                               len <- translateTerm env n
                               expr <- translateTerm (x:env) body
                               typ <- translateType env ty
