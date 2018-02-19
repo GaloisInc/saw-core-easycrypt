@@ -71,6 +71,7 @@ zipFilter bs = map snd . filter fst . zip bs
 showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
 
+-- arg order: outermost binding first
 globalArgsMap :: Map.Map Ident [Bool]
 globalArgsMap = Map.fromList
   [ ("Prelude.append", [False, False, False, True, True])
@@ -234,18 +235,23 @@ asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
+-- env is innermost first order
 translateTerm :: [String] -> Term -> ECTrans EC.Expr
 translateTerm env t = traceTerm "translateTerm" t $
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (translateTerm env) tf
     (asLambda -> Just _) -> do
-      tys <- mapM (translateType env . snd) args
-      EC.Binding EC.Lambda <$> pure (zip argNames (map Just tys))
-                           <*> translateTerm (argNames ++ env) e
+      tys <- mapM (translateType env . snd) params
+      EC.Binding EC.Lambda <$> pure (zip paramNames (map Just tys))
+                           -- env is in innermost first (reverse) binder order
+                           <*> translateTerm ((reverse paramNames) ++ env) e
         where
-          (args, e) = asLambdaList t
-          argNames = map fst args
+          -- params are in normal, outermost first, order
+          (params, e) = asLambdaList t
+          -- param names are in normal, outermost first, order
+          paramNames = map fst $ params
     (asApp -> Just _) ->
+      -- asApplyAll: innermost argument first
       let (f, args) = asApplyAll t
       in case f of
            (asGlobalDef -> Just i) ->
@@ -260,15 +266,18 @@ translateTerm env t = traceTerm "translateTerm" t $
                 "Prelude.unsafeCoerce" ->
                   translateTerm env (last args)
                 "Prelude.fix" -> case args of
-                  [resultType, lambda] ->
+                  [resultType, lambda] -> traceTerm "Prelude.fix: resultType" resultType $ traceTerm "Prelude.fix: lambda" lambda $
                     case resultType of
                       -- TODO: check that 'n' is finite
                       (asSeq -> Just (n, _)) ->
+                        traceTerm "Prelude.fix: n" n $
                         case lambda of
                           (asLambda->Just (x, ty, body)) | ty == resultType -> do
+                              trace ("Prelude.fix: x: " ++ x) $ traceTerm "Prelude.fix: ty" ty $ traceTerm "Prelude.fix: body" body $ return ()
                               len <- translateTerm env n
-                              expr <- translateTerm env body
-                              return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Nothing)] expr, EC.List []]
+                              expr <- translateTerm (x:env) body
+                              typ <- translateType env ty
+                              return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Just typ)] expr, EC.List []]
                           _ -> badTerm   
                         -- EC.App
                       _ -> notSupported
