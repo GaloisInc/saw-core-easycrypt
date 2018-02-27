@@ -17,7 +17,7 @@ Portability : portable
 module Verifier.SAW.Export.EasyCrypt where
 
 import Control.Monad.Except
-import Control.Monad.Writer
+import Control.Monad.State
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -54,12 +54,12 @@ instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
   
 newtype ECTrans a =
   ECTrans {
-    runECTrans :: WriterT
+    runECTrans :: StateT
                   [EC.Decl]
                   (Either (TranslationError Term))
                   a
   }
-  deriving (Applicative, Functor, Monad, MonadWriter [EC.Decl])
+  deriving (Applicative, Functor, Monad, MonadState [EC.Decl])
 
 instance MonadError (TranslationError Term) ECTrans where
     throwError e = ECTrans $ lift $ throwError e
@@ -304,17 +304,23 @@ translateTerm env t = traceTerm "translateTerm" t $
       | n < length env -> EC.LocalVar <$> pure (env !! n)
       | otherwise -> throwError $ LocalVarOutOfBounds t
     (unwrapTermF -> Constant n body _) -> do
-      b <- translateTerm env body
-      case b of
-        EC.Binding EC.Lambda args b' -> tell [EC.OpDecl n args b']
-        _ -> tell [EC.OpDecl n [] b]
+      decls <- get
+      if any (matchDecl n) decls
+        then return ()
+        else do
+          b <- translateTerm env body
+          case b of
+            EC.Binding EC.Lambda args b' -> modify (EC.OpDecl n args b' :)
+            _ -> modify (EC.OpDecl n [] b :)
       EC.ModVar <$> pure n
     _ -> trace "translateTerm fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
     badTerm = throwError $ BadTerm t
+    matchDecl n (EC.OpDecl n' _ _) = n == n'
+    matchDecl _ _ = False
 
 translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
-  (expr, decls) <- runWriterT $ runECTrans $ translateTerm [] t
-  return $ (vcat (map ppDecl decls)) <$$> ppExpr expr
+  (expr, decls) <- runStateT (runECTrans $ translateTerm [] t) []
+  return $ (vcat (map ppDecl (reverse decls))) <$$> ppExpr expr
