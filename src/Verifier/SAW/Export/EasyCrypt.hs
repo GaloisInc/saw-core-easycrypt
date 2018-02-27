@@ -137,26 +137,26 @@ flatTermFToExpr transFn tf = traceFTermF "flatTermFToExpr" tf $
   case tf of
     GlobalDef i   -> EC.ModVar <$> pure (translateIdent i)
     UnitValue     -> EC.Tuple <$> pure [] -- TODO: hack
-    UnitType      -> notExpr
+    UnitType      -> typePlaceholder -- notExpr
     PairValue x y -> EC.Tuple <$> traverse transFn [x, y]
-    PairType _ _  -> notExpr
+    PairType _ _  -> typePlaceholder -- notExpr
     PairLeft t    -> EC.TupleProject <$> transFn t <*> pure 1
     PairRight t   -> EC.TupleProject <$> transFn t <*> pure 2
     EmptyValue    -> pure $ EC.Record []
-    EmptyType     -> notExpr
     FieldValue fname fvalue rest -> do fname' <- asString fname
                                        fvalue' <- transFn fvalue
                                        recr <- transFn rest
                                        case mergeRecordFields (EC.Record [EC.RecordField fname' fvalue']) recr of
                                          Just record -> return record
                                          Nothing     -> badTerm
-    FieldType _ _ _    -> notExpr
     RecordSelector record field -> do field' <- asString field
                                       (flip EC.RecordProject field') <$> transFn record
+    EmptyType     -> typePlaceholder -- notExpr
+    FieldType _ _ _    -> typePlaceholder -- notExpr
     CtorApp i []       -> EC.ModVar <$> pure (translateIdent i)
     CtorApp ctorName args -> EC.App <$> flatTermFToExpr transFn (CtorApp ctorName [])
                                     <*> mapM transFn args
-    DataTypeApp _ _ -> notExpr
+    DataTypeApp _ _ -> typePlaceholder -- notExpr
     Sort _ -> notExpr
     NatLit i -> EC.IntLit <$> pure i
     ArrayValue _ vec -> EC.List <$> mapM transFn (Vector.toList vec)
@@ -174,6 +174,7 @@ flatTermFToExpr transFn tf = traceFTermF "flatTermFToExpr" tf $
     mergeRecordFields :: EC.Expr -> EC.Expr -> Maybe EC.Expr
     mergeRecordFields (EC.Record fs1) (EC.Record fs2) = Just $ EC.Record $ fs1 ++ fs2
     mergeRecordFields _ _ = Nothing
+    typePlaceholder = return (EC.Tuple [])
 
 flatTermFToType ::
   (Term -> ECTrans EC.Type) ->
@@ -203,7 +204,7 @@ flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
     DataTypeApp i args ->
       EC.TyApp <$> pure (translateIdent i) <*> traverse transFn args'
         where args' = filterArgs i args
-    Sort _ -> notType
+    Sort _ -> return (EC.TupleTy []) -- placeholder
     NatLit _ -> notType
     ArrayValue _ _ -> notType
     FloatLit _  -> notType
@@ -226,6 +227,9 @@ translateType env t = traceTerm "translateType" t $
       EC.FunTy <$> translateType env ty <*> translateType env body
     (asSeq -> Just (_, tf)) -> mkECListType <$> translateType env tf
     -- (asVectorType -> Just (_, tf)) -> mkECListType <$> translateType env tf
+    (asLocalVar -> Just n)
+      | n < length env -> return (EC.TyVar (Just (env !! n)))
+      | otherwise -> throwError $ LocalVarOutOfBounds t
     _ -> trace "translateType fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
