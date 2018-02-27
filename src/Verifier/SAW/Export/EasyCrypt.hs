@@ -143,19 +143,22 @@ flatTermFToExpr transFn tf = traceFTermF "flatTermFToExpr" tf $
     PairLeft t    -> EC.TupleProject <$> transFn t <*> pure 1
     PairRight t   -> EC.TupleProject <$> transFn t <*> pure 2
     EmptyValue    -> pure $ EC.Record []
-    FieldValue fname fvalue rest -> do fname' <- asString fname
-                                       fvalue' <- transFn fvalue
-                                       recr <- transFn rest
-                                       case mergeRecordFields (EC.Record [EC.RecordField fname' fvalue']) recr of
-                                         Just record -> return record
-                                         Nothing     -> badTerm
-    RecordSelector record field -> do field' <- asString field
-                                      (flip EC.RecordProject field') <$> transFn record
     EmptyType     -> typePlaceholder -- notExpr
+    FieldValue fname fvalue rest -> do
+      fname' <- asString fname
+      fvalue' <- transFn fvalue
+      recr <- transFn rest
+      case mergeRecordFields (EC.Record [EC.RecordField fname' fvalue']) recr of
+        Just record -> return record
+        Nothing     -> badTerm
     FieldType _ _ _    -> typePlaceholder -- notExpr
+    RecordSelector record field -> do
+      field' <- asString field
+      (flip EC.RecordProject field') <$> transFn record
     CtorApp i []       -> EC.ModVar <$> pure (translateIdent i)
-    CtorApp ctorName args -> EC.App <$> flatTermFToExpr transFn (CtorApp ctorName [])
-                                    <*> mapM transFn args
+    CtorApp ctorName args ->
+      EC.App <$> flatTermFToExpr transFn (CtorApp ctorName [])
+             <*> mapM transFn args
     DataTypeApp _ _ -> typePlaceholder -- notExpr
     Sort _ -> notExpr
     NatLit i -> EC.IntLit <$> pure i
@@ -283,7 +286,7 @@ translateTerm env t = traceTerm "translateTerm" t $
                       -- TODO: check that 'n' is finite
                       (asSeq -> Just (n, _)) ->
                         case lambda of
-                          (asLambda->Just (x, ty, body)) | ty == resultType -> do
+                          (asLambda -> Just (x, ty, body)) | ty == resultType -> do
                               len <- translateTerm env n
                               -- let len = EC.App (EC.ModVar "size") [EC.ModVar x]
                               expr <- translateTerm (x:env) body
