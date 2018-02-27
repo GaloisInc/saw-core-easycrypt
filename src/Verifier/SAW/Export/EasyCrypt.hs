@@ -82,10 +82,12 @@ globalArgsMap = Map.fromList
   , ("Prelude.map", [False, False, True, False, True])
   , ("Prelude.bvXor", [False, True, True])
   , ("Prelude.zipWith", [False, False, False, True, False, True, True])
+  , ("Cryptol.ecEq", [False, False, True, True])
   -- Assuming only finite Cryptol sequences
   , ("Cryptol.ecCat", [False, False, False, True, True])
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
   , ("Cryptol.seqMap", [False, False, False, True, True])
+  , ("Cryptol.ecJoin", [False, True, False, True])
   , ("Cryptol.ecSplit", [False, True, False, True])
   , ("Cryptol.ecXor", [False, True, True, True])
   , ("Cryptol.PLogicSeq", [False, False, True])
@@ -115,8 +117,14 @@ translateIdent i =
     "Prelude.map" -> "map"
     "Cryptol.seqMap" -> "map"
     "Prelude.bvXor" -> "sawcoreBVXor"
+    "Cryptol.ecJoin" -> "cryptolECJoin"
     "Cryptol.ecSplit" -> "cryptolECSplit"
     "Cryptol.Num" -> "int"
+    "Cryptol.TCNum" -> "num"
+    "Cryptol.tcAdd" -> "(+)"
+    "Cryptol.tcSub" -> "(-)"
+    "Cryptol.tcMul" -> "(*)"
+    "Cryptol.ecEq" -> "(=)"
     "Cryptol.ecXor" -> "cryptolECXor"
     "Cryptol.PLogicSeq" -> "cryptolPLogicSeq"
     "Cryptol.PLogicSeqBool" -> "cryptolPLogicSeq"
@@ -185,9 +193,9 @@ flatTermFToType ::
   ECTrans EC.Type
 flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
   case tf of
-    GlobalDef i   -> EC.TyApp <$> pure (translateIdent i) <*> pure []
+    GlobalDef i   -> return (EC.TyApp (translateIdent i) [])
     UnitValue     -> notType
-    UnitType      -> EC.TyApp <$> pure "unit" <*> pure []
+    UnitType      -> return (EC.TyApp "unit" [])
     PairValue _ _ -> notType
     PairType x y  -> EC.TupleTy <$> traverse transFn [x, y]
     PairLeft _    -> notType
@@ -207,7 +215,7 @@ flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
     DataTypeApp i args ->
       EC.TyApp <$> pure (translateIdent i) <*> traverse transFn args'
         where args' = filterArgs i args
-    Sort _ -> return (EC.TupleTy []) -- placeholder
+    Sort _ -> return (EC.TyApp "unit" []) -- placeholder
     NatLit _ -> notType
     ArrayValue _ _ -> notType
     FloatLit _  -> notType
@@ -280,6 +288,12 @@ translateTerm env t = traceTerm "translateTerm" t $
                   translateTerm env (last args)
                 "Prelude.unsafeCoerce" ->
                   translateTerm env (last args)
+                "Prelude.ite" -> case args of
+                  [_, cnd, thn, els] ->
+                    EC.If <$> translateTerm env cnd
+                          <*> translateTerm env thn
+                          <*> translateTerm env els
+                  _ -> notSupported
                 "Prelude.fix" -> case args of
                   [resultType, lambda] -> 
                     case resultType of
