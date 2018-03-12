@@ -171,8 +171,6 @@ flatTermFToExpr transFn tf = traceFTermF "flatTermFToExpr" tf $
     Sort _ -> notExpr
     NatLit i -> EC.IntLit <$> pure i
     ArrayValue _ vec -> EC.List <$> mapM transFn (Vector.toList vec)
-    FloatLit _     -> notSupported
-    DoubleLit _    -> notSupported
     StringLit _    -> notSupported
     ExtCns (EC _ _ _) -> notSupported
   where
@@ -218,8 +216,6 @@ flatTermFToType transFn tf = traceFTermF "flatTermFToType" tf $
     Sort _ -> return (EC.TyApp "unit" []) -- placeholder
     NatLit _ -> notType
     ArrayValue _ _ -> notType
-    FloatLit _  -> notType
-    DoubleLit _ -> notType
     StringLit _ -> notType
     ExtCns (EC _ _ _) -> notType
   where
