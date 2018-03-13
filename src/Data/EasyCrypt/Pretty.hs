@@ -12,6 +12,7 @@ module Data.EasyCrypt.Pretty where
 import Text.PrettyPrint.ANSI.Leijen
 import Data.EasyCrypt.AST
 import Data.Maybe (fromMaybe)
+import Prelude hiding ((<$>))
 
 -- TODO: import SAWCore pretty-printer?
 tightSepList :: Doc -> [Doc] -> Doc
@@ -53,7 +54,7 @@ ppBinding q bs e =
     Lambda ->
       parens (text "fun" <+> bindDocs <+> text "=>" <+> ppExpr e)
         where
-          bindDocs = sep (map ppBind bs)
+          bindDocs = hsep (map ppBind bs)
 
 ppBind :: Binding -> Doc
 ppBind (x, Nothing) = ppIdent x
@@ -75,7 +76,7 @@ ppExpr e =
     LocalVar x -> ppIdent x
     ModVar x -> ppIdent x
     App f [] -> ppExpr f
-    App f as -> parens (sep (map ppExpr (f : as)))
+    App f as -> parens (hsep (map ppExpr (f : as)))
     Binding q bs body -> ppBinding q bs body
     Let pat e1 e2 -> ppLet pat e1 e2
     Tuple es -> parens (commaSepList (map ppExpr es))
@@ -89,7 +90,9 @@ ppExpr e =
 
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of
-  OpDecl nm bs body -> hsep $ [text "op", text nm] ++ map ppBind bs ++ [equals, ppExpr body]
+  OpDecl nm bs body -> nest 2 $
+                       hsep ([text "op", text nm] ++ map ppBind bs ++ [equals]) <$>
+                       ppExpr body <> period
   TypeDecl nm params body -> hsep [text "type"
                                   ,parens (commaSepList (map ppIdent params))
                                   ,text nm

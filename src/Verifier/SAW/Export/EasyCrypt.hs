@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -18,6 +19,7 @@ module Verifier.SAW.Export.EasyCrypt where
 
 import Control.Monad.Except
 import Control.Monad.State
+import Data.List (intersperse)
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -83,53 +85,70 @@ globalArgsMap = Map.fromList
   , ("Prelude.bvXor", [False, True, True])
   , ("Prelude.zipWith", [False, False, False, True, False, True, True])
   , ("Cryptol.ecEq", [False, False, True, True])
+  , ("Cryptol.ecDemote", [True, True])
   -- Assuming only finite Cryptol sequences
   , ("Cryptol.ecCat", [False, False, False, True, True])
+  , ("Cryptol.seq", [True, False])
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
   , ("Cryptol.seqMap", [False, False, False, True, True])
-  , ("Cryptol.ecJoin", [False, True, False, True])
+  , ("Cryptol.ecJoin", [False, False, False, True])
   , ("Cryptol.ecSplit", [False, True, False, True])
+  , ("Cryptol.ecSplitAt", [True, True, False, True])
   , ("Cryptol.ecXor", [False, True, True, True])
+  , ("Cryptol.ecZero", [True, False])
   , ("Cryptol.PLogicSeq", [False, False, True])
   , ("Cryptol.PLogicSeqBool", [False])
   , ("Cryptol.PLogicWord", [False])
+  ]
+
+cryptolPreludeMap :: Map.Map String String
+cryptolPreludeMap = Map.fromList
+  [ ("repeat", "cryptolRepeat")
+  , ("take", "cryptolTake")
+  , ("drop", "cryptolDrop")
+  , ("/\\", "(/\\)")
+  ]
+
+identMap :: Map.Map Ident EC.Ident
+identMap = Map.fromList
+  [ ("Prelude.Bool", "bool")
+  , ("Prelude.False", "false")
+  , ("Prelude.True", "true")
+  , ("Prelude.Nat", "int")
+  , ("Prelude.Vec", "list")
+  , ("Prelude.append", "(++)")
+  , ("Cryptol.ecCat", "(++)")
+  , ("Prelude.take", "take")
+  , ("Prelude.drop", "drop")
+  , ("Prelude.zip", "zip")
+  , ("Cryptol.seq", "cryptolSeq")
+  , ("Cryptol.seqZip", "zip")
+  , ("Prelude.zipWith", "zipWith")
+  , ("Prelude.uncurry", "sawcoreUncurry")
+  , ("Prelude.map", "map")
+  , ("Cryptol.seqMap", "map")
+  , ("Prelude.bvXor", "sawcoreBVXor")
+  , ("Cryptol.ecDemote", "cryptolECDemote")
+  , ("Cryptol.ecJoin", "cryptolECJoin")
+  , ("Cryptol.ecSplit", "cryptolECSplit")
+  , ("Cryptol.ecSplitAt", "cryptolECSplitAt")
+  , ("Cryptol.Num", "int")
+  , ("Cryptol.TCNum", "id")
+  , ("Cryptol.tcAdd", "(+)")
+  , ("Cryptol.tcSub", "(-)")
+  , ("Cryptol.tcMul", "( * )")
+  , ("Cryptol.ecEq", "(=)")
+  , ("Cryptol.ecXor", "cryptolECXor")
+  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq")
+  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeq")
+  , ("Cryptol.PLogicWord", "cryptolPLogicWord")
   ]
 
 filterArgs :: Ident -> [a] -> [a]
 filterArgs i = maybe id zipFilter (Map.lookup i globalArgsMap)
 
 translateIdent :: Ident -> EC.Ident
-translateIdent i =
-  case i of
-    "Prelude.Bool" -> "bool"
-    "Prelude.False" -> "false"
-    "Prelude.True" -> "true"
-    "Prelude.Nat" -> "int"
-    "Prelude.Vec" -> "list"
-    "Prelude.append" -> "(++)"
-    "Cryptol.ecCat" -> "(++)"
-    "Prelude.take" -> "take"
-    "Prelude.drop" -> "drop"
-    "Prelude.zip" -> "zip"
-    "Cryptol.seqZip" -> "zip"
-    "Prelude.zipWith" -> "zipWith"
-    "Prelude.uncurry" -> "sawcoreUncurry"
-    "Prelude.map" -> "map"
-    "Cryptol.seqMap" -> "map"
-    "Prelude.bvXor" -> "sawcoreBVXor"
-    "Cryptol.ecJoin" -> "cryptolECJoin"
-    "Cryptol.ecSplit" -> "cryptolECSplit"
-    "Cryptol.Num" -> "int"
-    "Cryptol.TCNum" -> "num"
-    "Cryptol.tcAdd" -> "(+)"
-    "Cryptol.tcSub" -> "(-)"
-    "Cryptol.tcMul" -> "(*)"
-    "Cryptol.ecEq" -> "(=)"
-    "Cryptol.ecXor" -> "cryptolECXor"
-    "Cryptol.PLogicSeq" -> "cryptolPLogicSeq"
-    "Cryptol.PLogicSeqBool" -> "cryptolPLogicSeq"
-    "Cryptol.PLogicWord" -> "cryptolPLogicWord"
-    _ -> show i
+translateIdent i = Map.findWithDefault (show i) i identMap
 
 traceFTermF :: String -> FlatTermF Term -> a -> a
 traceFTermF ctx tf = traceTerm ctx (Unshared $ FTermF tf)
@@ -315,14 +334,15 @@ translateTerm env t = traceTerm "translateTerm" t $
       | otherwise -> throwError $ LocalVarOutOfBounds t
     (unwrapTermF -> Constant n body _) -> do
       decls <- get
-      if any (matchDecl n) decls
-        then return ()
-        else do
-          b <- translateTerm env body
-          case b of
-            EC.Binding EC.Lambda args b' -> modify (EC.OpDecl n args b' :)
-            _ -> modify (EC.OpDecl n [] b :)
-      EC.ModVar <$> pure n
+      if | any (matchDecl n) decls -> EC.ModVar <$> pure n
+         | n `Map.member` cryptolPreludeMap ->
+             EC.ModVar <$> pure (cryptolPreludeMap Map.! n)
+         | otherwise -> do
+             b <- translateTerm env body
+             case b of
+               EC.Binding EC.Lambda args b' -> modify (EC.OpDecl n args b' :)
+               _ -> modify (EC.OpDecl n [] b :)
+             EC.ModVar <$> pure n
     _ -> trace "translateTerm fallthrough" notSupported
   where
     notSupported = throwError $ NotSupported t
@@ -333,4 +353,6 @@ translateTerm env t = traceTerm "translateTerm" t $
 translateTermDoc :: Term -> Either (TranslationError Term) Doc
 translateTermDoc t = do
   (expr, decls) <- runStateT (runECTrans $ translateTerm [] t) []
-  return $ (vcat (map ppDecl (reverse decls))) <$$> ppExpr expr
+  return $ ((vcat . intersperse hardline . map ppDecl . reverse) decls) <$$>
+           hardline <$$>
+           ppExpr expr
