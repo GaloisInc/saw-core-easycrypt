@@ -84,6 +84,7 @@ globalArgsMap = Map.fromList
   , ("Prelude.map", [False, False, True, False, True])
   , ("Prelude.bvXor", [False, True, True])
   , ("Prelude.zipWith", [False, False, False, True, False, True, True])
+  , ("Prelude.eq", [False, True, True])
   , ("Cryptol.ecEq", [False, False, True, True])
   , ("Cryptol.ecDemote", [True, True])
   -- Assuming only finite Cryptol sequences
@@ -138,6 +139,7 @@ identMap = Map.fromList
   , ("Cryptol.tcSub", "(-)")
   , ("Cryptol.tcMul", "( * )")
   , ("Cryptol.ecEq", "(=)")
+  , ("Prelude.eq", "(=)")
   , ("Cryptol.ecXor", "cryptolECXor")
   , ("Cryptol.PLogicSeq", "cryptolPLogicSeq")
   , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeq")
