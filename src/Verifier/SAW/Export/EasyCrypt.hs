@@ -276,15 +276,15 @@ asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
 -- env is innermost first order
-translateTerm :: [String] -> Term -> ECTrans EC.Expr
-translateTerm env t = traceTerm "translateTerm" t $
+translateTerm :: Bool -> [String] -> Term -> ECTrans EC.Expr
+translateTerm traverseConsts env t = traceTerm "translateTerm" t $
   case t of
-    (asFTermF -> Just tf)  -> flatTermFToExpr (translateTerm env) tf
+    (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
     (asLambda -> Just _) -> do
       tys <- mapM (translateType env . snd) params
       EC.Binding EC.Lambda <$> pure (zip paramNames (map Just tys))
                            -- env is in innermost first (reverse) binder order
-                           <*> translateTerm ((reverse paramNames) ++ env) e
+                           <*> go ((reverse paramNames) ++ env) e
         where
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
@@ -302,14 +302,14 @@ translateTerm env t = traceTerm "translateTerm" t $
                 -- away. For now throwing away the type, but we'll see
                 -- if we need to resulting type (second parameter) in
                 -- practice.
-                  translateTerm env (last args)
+                  go env (last args)
                 "Prelude.unsafeCoerce" ->
-                  translateTerm env (last args)
+                  go env (last args)
                 "Prelude.ite" -> case args of
                   [_, cnd, thn, els] ->
-                    EC.If <$> translateTerm env cnd
-                          <*> translateTerm env thn
-                          <*> translateTerm env els
+                    EC.If <$> go env cnd
+                          <*> go env thn
+                          <*> go env els
                   _ -> notSupported
                 "Prelude.fix" -> case args of
                   [resultType, lambda] -> 
@@ -318,29 +318,29 @@ translateTerm env t = traceTerm "translateTerm" t $
                       (asSeq -> Just (n, _)) ->
                         case lambda of
                           (asLambda -> Just (x, ty, body)) | ty == resultType -> do
-                              len <- translateTerm env n
+                              len <- go env n
                               -- let len = EC.App (EC.ModVar "size") [EC.ModVar x]
-                              expr <- translateTerm (x:env) body
+                              expr <- go (x:env) body
                               typ <- translateType env ty
                               return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Just typ)] expr, EC.List []]
                           _ -> badTerm   
                       _ -> notSupported
                   _ -> badTerm
-                _ -> EC.App <$> translateTerm env f
-                            <*> traverse (translateTerm env) (filterArgs i args)
+                _ -> EC.App <$> go env f
+                            <*> traverse (go env) (filterArgs i args)
                   
-           _ -> EC.App <$> translateTerm env f
-                       <*> traverse (translateTerm env) args
+           _ -> EC.App <$> go env f
+                       <*> traverse (go env) args
     (asLocalVar -> Just n)
       | n < length env -> EC.LocalVar <$> pure (env !! n)
       | otherwise -> throwError $ LocalVarOutOfBounds t
     (unwrapTermF -> Constant n body _) -> do
       decls <- get
-      if | any (matchDecl n) decls -> EC.ModVar <$> pure n
-         | n `Map.member` cryptolPreludeMap ->
+      if | n `Map.member` cryptolPreludeMap ->
              EC.ModVar <$> pure (cryptolPreludeMap Map.! n)
+         | not traverseConsts || any (matchDecl n) decls -> EC.ModVar <$> pure n
          | otherwise -> do
-             b <- translateTerm env body
+             b <- go env body
              case b of
                EC.Binding EC.Lambda args b' -> modify (EC.OpDecl n args b' :)
                _ -> modify (EC.OpDecl n [] b :)
@@ -351,10 +351,11 @@ translateTerm env t = traceTerm "translateTerm" t $
     badTerm = throwError $ BadTerm t
     matchDecl n (EC.OpDecl n' _ _) = n == n'
     matchDecl _ _ = False
+    go = translateTerm traverseConsts
 
-translateTermDoc :: Term -> Either (TranslationError Term) Doc
-translateTermDoc t = do
-  (expr, decls) <- runStateT (runECTrans $ translateTerm [] t) []
+translateTermDoc :: Bool -> Term -> Either (TranslationError Term) Doc
+translateTermDoc traverseConsts t = do
+  (expr, decls) <- runStateT (runECTrans $ translateTerm traverseConsts [] t) []
   return $ ((vcat . intersperse hardline . map ppDecl . reverse) decls) <$$>
            hardline <$$>
            ppExpr expr
